@@ -108,3 +108,29 @@ There is an overarching assumption that you already have [Customisation for Cont
       accounts:
         - # Either the 12-digit Account ID or the Logical Name for the Control Tower Management Account
 ```
+
+5.  Utilise the following CloudFormation Snippet to ensure that the VPC's are sending there Flowlogs to the centralised log bucket.
+
+```yaml
+    Parameters:
+        pFlowLogDestinationBucket:
+            Type: String
+            Description: "The Centralised S3 Bucket for FlowLogs in the Log Archive Account."
+    Resources:
+        rVpcFlowLog:
+            Type: AWS::EC2::FlowLog
+            Properties:
+            DestinationOptions:
+                FileFormat: parquet
+                HiveCompatiblePartitions: true
+                PerHourPartition: true
+            LogDestination: !Sub arn:${AWS::Partition}:s3:::${pFlowLogDestinationBucket}
+            LogDestinationType: s3
+            LogFormat: ${account-id} ${action} ${az-id} ${bytes} ${dstaddr} ${dstport} ${end} ${flow-direction} ${instance-id} ${interface-id} ${log-status} ${packets} ${pkt-dst-aws-service} ${pkt-dstaddr} ${pkt-src-aws-service} ${pkt-srcaddr} ${protocol} ${region} ${srcaddr} ${srcport} ${start} ${sublocation-id} ${sublocation-type} ${subnet-id} ${tcp-flags} ${traffic-path} ${type} ${version} ${vpc-id}
+            MaxAggregationInterval: 600
+            ResourceId: !Ref rVpc
+            ResourceType: VPC
+            TrafficType: ALL
+```
+
+6.  When adding the above CloudFormation snippet ensure that you provide the name of the centralised flowlog bucket in the parameter `pFlowLogDestinationBucket`.
