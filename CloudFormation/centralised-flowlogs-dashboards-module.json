@@ -1,0 +1,30 @@
+[
+    {
+        "ParameterKey": "pSharedServicesAccountId",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pAthenaQueryResultBucketArn",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pAthenaResultsOutputLocation",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pVpcFlowLogsBucketName",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pVpcFlowLogsS3BucketLocation",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pQuickSightUser",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pVpcFlowLogsAthenaDatabase",
+        "ParameterValue": "vpcflowlogsathenadatabase"
+    }
+]

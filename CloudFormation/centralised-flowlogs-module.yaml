@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "CloudFormation Module to Deploy S3 Buckets and Pre-Requisites required for VPC FlowLogs and Quicksight Dashboards"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Account Configuration
+        Parameters:
+          - pLogArchiveAccountId
+          - pSharedServicesAccountId
+      - Label:
+          default: Data Retention Configuration
+        Parameters:
+          - pS3LifeCycleTransition
+      - Label:
+          default: Athena/Glue Configuration
+        Parameters:
+          - pAthenaQueryResultBucketArn
+Parameters:
+  pS3LifeCycleTransition:
+    Type: String
+    Description: Number of Days to retain the logs in Amazon S3 before transitioning the Logs to Amazon S3 Glacier.
+  pLogArchiveAccountId:
+    Type: String
+    Description: "AWS Account Id where FlowLogs Bucket is deployed."
+    AllowedPattern: '\d{12}'
+  pSharedServicesAccountId:
+    Description: AWS Account ID for Control Tower Shared Services Account
+    Type: String
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: "This must be a 12 character string."
+    MinLength: 12
+    MaxLength: 12
+  pAthenaQueryResultBucketArn:
+    Type: String
+    Description: The ARN of the Amazon S3 bucket to which Athena query results are stored. e.g. 'arn:aws:s3:::aws-athena-query-results-us-east-1-XXXXXXXXXXXXXX'
+Resources:
+  rVpcFlowLogsSharedBucketStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: Centralised-Flowlogs-Shared-Bucket
+      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/AWSControlTowerStackSetRole
+      CallAs: SELF
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      Description: CloudFormation Template to Setup Destination S3 Bucket for Replicated VPC FlowLogs
+      ExecutionRoleName: AWSControlTowerExecution
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        FailureTolerancePercentage: 0
+        MaxConcurrentPercentage: 100
+        RegionConcurrencyType: PARALLEL
+      PermissionModel: SELF_MANAGED
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Ref pSharedServicesAccountId
+          Regions:
+            - !Ref AWS::Region
+      TemplateURL: !Sub "https://sra-staging-${AWS::AccountId}-${AWS::Region}.s3.amazonaws.com/custom_templates/flowlogs/centralised-flowlogs-shared-bucket.yaml"
+      Parameters:
+        - ParameterKey: pS3LifeCycleTransition
+          ParameterValue: !Ref pS3LifeCycleTransition
+        - ParameterKey: pLogArchiveAccountId
+          ParameterValue: !Ref pLogArchiveAccountId
+        - ParameterKey: pAthenaQueryResultBucketArn
+          ParameterValue: !Ref pAthenaQueryResultBucketArn
+  rVpcFlowLogsBucketStackSet:
+    DependsOn:
+      - rVpcFlowLogsSharedBucketStackSet
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: Centralised-Flowlogs-Bucket
+      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/AWSControlTowerStackSetRole
+      CallAs: SELF
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      Description: CloudFormation Template to Setup Source S3 Bucket for Replicated VPC FlowLogs
+      ExecutionRoleName: AWSControlTowerExecution
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        FailureTolerancePercentage: 0
+        MaxConcurrentPercentage: 100
+        RegionConcurrencyType: PARALLEL
+      PermissionModel: SELF_MANAGED
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Ref pLogArchiveAccountId
+          Regions:
+            - !Ref AWS::Region
+      TemplateURL: !Sub "https://sra-staging-${AWS::AccountId}-${AWS::Region}.s3.amazonaws.com/custom_templates/flowlogs/centralised-flowlogs-bucket.yaml"
+      Parameters:
+        - ParameterKey: pS3LifeCycleTransition
+          ParameterValue: !Ref pS3LifeCycleTransition
+        - ParameterKey: pSharedServicesAccountId
+          ParameterValue: !Ref pSharedServicesAccountId

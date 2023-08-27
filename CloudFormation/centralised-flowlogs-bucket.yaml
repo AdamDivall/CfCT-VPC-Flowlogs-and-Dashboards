@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ---
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Account Configuration
+        Parameters:
+          - pSharedServicesAccountId
+      - Label:
+          default: Data Retention Configuration
+        Parameters:
+          - pS3LifeCycleTransition
+Parameters:
+  pSharedServicesAccountId:
+    Description: AWS Account ID for Control Tower Shared Services Account
+    Type: String
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: "This must be a 12 character string."
+    MinLength: 12
+    MaxLength: 12
+  pS3LifeCycleTransition:
+    Type: String
+    Description: Number of Days to retain the logs in Amazon S3 before transitioning the Logs to Amazon S3 Glacier.
+Resources:
+  rS3VpcFlowlogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub flowlogs-${AWS::Region}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      AccessControl: BucketOwnerFullControl
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      ReplicationConfiguration:
+        Role: !GetAtt rCrossRegionReplicationRole.Arn
+        Rules:
+          - Destination:
+              Bucket: !Sub "arn:${AWS::Partition}:s3:::flowlogs-shared-${AWS::Region}-${pSharedServicesAccountId}"
+              StorageClass: STANDARD
+            Id: ReplicationFlowLogs
+            Prefix: ""
+            Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: RetentionRule
+            Status: Enabled
+            Transitions:
+                - TransitionInDays: !Ref pS3LifeCycleTransition
+                  StorageClass: Glacier
+            NoncurrentVersionTransitions:
+                - TransitionInDays: !Ref pS3LifeCycleTransition
+                  StorageClass: Glacier
+  rS3VpcFlowlogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref rS3VpcFlowlogsBucket
+      PolicyDocument:
+        Id: S3BucketPolicy
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AWSLogDeliveryWrite"
+            Effect: "Allow"
+            Principal:
+              Service: "delivery.logs.amazonaws.com"
+            Action:
+              - "s3:PutObject"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${rS3VpcFlowlogsBucket}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: "bucket-owner-full-control"
+          - Sid: "AWSLogDeliveryAclCheck"
+            Effect: "Allow"
+            Principal:
+              Service: "delivery.logs.amazonaws.com"
+            Action:
+              - "s3:GetBucketAcl"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${rS3VpcFlowlogsBucket}"
+          - Sid: "DenyNonHTTPSAccess"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource: !Sub "arn:${AWS::Partition}:s3:::${rS3VpcFlowlogsBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: "AllowTLS12Only"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${rS3VpcFlowlogsBucket}"
+              - !Sub "arn:${AWS::Partition}:s3:::${rS3VpcFlowlogsBucket}/*"
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+  rCrossRegionReplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "S3-Replication-Role-${AWS::AccountId}-to-${pSharedServicesAccountId}"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "s3.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: "CrossAccountPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:GetReplicationConfiguration"
+                  - "s3:ListBucket"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::flowlogs-${AWS::Region}-${AWS::AccountId}"
+              - Effect: "Allow"
+                Action:
+                  - "s3:GetObjectVersionForReplication"
+                  - "s3:GetObjectVersionAcl"
+                  - "s3:GetObjectVersionTagging"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::flowlogs-${AWS::Region}-${AWS::AccountId}/*"
+              - Effect: "Allow"
+                Action:
+                  - "s3:ReplicateObject"
+                  - "s3:ReplicateDelete"
+                  - "s3:ReplicateTags"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::flowlogs-shared-${AWS::Region}-${pSharedServicesAccountId}/*"

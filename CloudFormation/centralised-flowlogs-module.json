@@ -1,0 +1,18 @@
+[
+    {
+        "ParameterKey": "pLogArchiveAccountId",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pSharedServicesAccountId",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pS3LifeCycleTransition",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "pAthenaQueryResultBucketArn",
+        "ParameterValue": ""
+    }
+]

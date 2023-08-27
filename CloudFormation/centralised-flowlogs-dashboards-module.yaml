@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ---
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Account Configuration
+        Parameters:
+          - pSharedServicesAccountId
+      - Label:
+          default: Athena/Glue Configuration
+        Parameters:
+          - pAthenaQueryResultBucketArn
+          - pAthenaResultsOutputLocation
+          - pVpcFlowLogsBucketName
+          - pVpcFlowLogsS3BucketLocation
+      - Label:
+          default: QuickSight Configuration
+        Parameters:
+          - pQuickSightUser
+          - pVpcFlowLogsAthenaDatabase
+Parameters:
+  pSharedServicesAccountId:
+    Description: AWS Account ID for Control Tower Shared Services Account
+    Type: String
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: "This must be a 12 character string."
+    MinLength: 12
+    MaxLength: 12
+  pAthenaQueryResultBucketArn:
+    Type: String
+    Description: The ARN of the Amazon S3 bucket to which Athena query results are stored. e.g. 'arn:aws:s3:::aws-athena-query-results-us-east-1-XXXXXXXXXXXXXX'
+  pAthenaResultsOutputLocation:
+    Type: String
+    Description: URI path of the Amazon S3 bucket where Athena query results are stored.
+  pVpcFlowLogsBucketName:
+    Type: String
+    Description: Name of the Amazon S3 bucket where vpc flow logs are stored. e.g. my-flow-logs
+  pVpcFlowLogsS3BucketLocation:
+    Type: String
+    Description: URI path of Amazon S3 bucket folder where VPC Flow logs files are stored e.g. Location='s3://my-vpc-flow-logs-bucket/vpc-flow-logs-enh-parquet/AWSLogs/'
+  pQuickSightUser:
+    Type: String
+    Description: Amazon QuickSight Current Logged In User
+  pVpcFlowLogsAthenaDatabase:
+    Type: String
+    Description: Athena database name where external table for VPC flow logs is created
+Resources:
+  rCoreInfrastructureStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: Centralised-Flowlogs-Core-Infrastructure
+      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/AWSControlTowerStackSetRole
+      CallAs: SELF
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      Description: CloudFormation Template to Setup Glue and Athena Resources required for VPC FlowLogs Dashboards
+      ExecutionRoleName: AWSControlTowerExecution
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        FailureTolerancePercentage: 0
+        MaxConcurrentPercentage: 100
+        RegionConcurrencyType: PARALLEL
+      PermissionModel: SELF_MANAGED
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Ref pSharedServicesAccountId
+          Regions:
+            - !Ref AWS::Region
+      TemplateURL: !Sub "https://sra-staging-${AWS::AccountId}-${AWS::Region}.s3.amazonaws.com/custom_templates/centralised-flowlogs-core-infrastructure.yaml"
+      Parameters:
+        - ParameterKey: pAthenaQueryResultBucketArn
+          ParameterValue: !Ref pAthenaQueryResultBucketArn
+        - ParameterKey: pAthenaResultsOutputLocation
+          ParameterValue: !Ref pAthenaResultsOutputLocation
+        - ParameterKey: pVpcFlowLogsBucketName
+          ParameterValue: !Ref pVpcFlowLogsBucketName
+        - ParameterKey: pVpcFlowLogsS3BucketLocation
+          ParameterValue: !Ref pVpcFlowLogsS3BucketLocation
+  rQuickSightDashboardsStackSet:
+    DependsOn:
+      - rCoreInfrastructureStackSet
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: Centralised-Flowlogs-QuickSight-Dashboards
+      AdministrationRoleARN: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/service-role/AWSControlTowerStackSetRole
+      CallAs: SELF
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      Description: CloudFormation Template to Setup QuickSight Dashboards for VPC FlowLogs
+      ExecutionRoleName: AWSControlTowerExecution
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        FailureTolerancePercentage: 0
+        MaxConcurrentPercentage: 100
+        RegionConcurrencyType: PARALLEL
+      PermissionModel: SELF_MANAGED
+      StackInstancesGroup:
+        - DeploymentTargets:
+            Accounts:
+              - !Ref pSharedServicesAccountId
+          Regions:
+            - !Ref AWS::Region
+      TemplateURL: !Sub "https://sra-staging-${AWS::AccountId}-${AWS::Region}.s3.amazonaws.com/custom_templates/centralised-flowlogs-quicksight-dashboards.yaml"
+      Parameters:
+        - ParameterKey: pQuickSightUser
+          ParameterValue: !Ref pQuickSightUser
+        - ParameterKey: pVpcFlowLogsAthenaDatabase
+          ParameterValue: !Ref pVpcFlowLogsAthenaDatabase
